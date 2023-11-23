@@ -22,7 +22,8 @@ class ThreadedKernel {
     ThreadedKernel(int argc, char **argv);
     				// Interpret command line arguments
     ~ThreadedKernel();		// deallocate the kernel
-    
+
+    void Initialize(SchedulerType type); 
     void Initialize(); 		// initialize the kernel -- separated
 				// from constructor because 
 				// refers to "kernel" as a global

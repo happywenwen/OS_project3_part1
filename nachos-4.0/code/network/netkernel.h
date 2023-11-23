@@ -24,6 +24,7 @@ class NetKernel : public UserProgKernel {
     ~NetKernel();		// deallocate the kernel
 
     void Initialize();		// initialize the kernel 
+    void Initialize(SchedulerType);
 
     void Run();			// do kernel stuff 
 

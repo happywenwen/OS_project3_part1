@@ -46,25 +46,38 @@ Alarm::Alarm(bool doRandom)
 //	interrupts.  In this case, we can safely halt.
 //----------------------------------------------------------------------
 
-void Alarm::CallBack() 
+void 
+Alarm::CallBack() 
 {
     Interrupt *interrupt = kernel->interrupt;
     MachineStatus status = interrupt->getStatus();
     bool woken = _bedroom.MorningCall();
  
-    if (status == IdleMode && !woken && _bedroom.IsEmpty()) {	// is it time to quit?
+   kernel->currentThread->setPriority(kernel->currentThread->getPriority() - 1);
+
+    if (status == IdleMode && !woken && _bedroom.IsEmpty()) {// is it time to quit?
         if (!interrupt->AnyFutureInterrupts()) {
-	    timer->Disable();	// turn off the timer
-	}
+        timer->Disable();	// turn off the timer
+    }
     } else {			// there's someone to preempt
-	interrupt->YieldOnReturn();
+    if(kernel->scheduler->getSchedulerType() == RR ||
+        kernel->scheduler->getSchedulerType() == Priority ) {
+//		interrupt->YieldOnReturn();
+        cout << "=== interrupt->YieldOnReturn ===" << endl;
+        interrupt->YieldOnReturn();
+        }
     }
 }
 
-void Alarm::WaitUntil(int x) {
+void 
+Alarm::WaitUntil(int x) {
     IntStatus oldLevel = kernel->interrupt->SetLevel(IntOff);
     Thread* t = kernel->currentThread;
-    //cout << "Alarm::WaitUntil go sleep" << endl;
+    // burst time
+    int worktime = kernel->stats->userTicks - t->getStartTime();
+    t->setBurstTime(t->getBurstTime() + worktime);
+    t->setStartTime(kernel->stats->userTicks);
+    cout << "Alarm::WaitUntil go sleep" << endl;
     _bedroom.PutToBed(t, x);
     kernel->interrupt->SetLevel(oldLevel);
 }
