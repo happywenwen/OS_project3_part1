@@ -17,7 +17,16 @@
 #include "filesys.h"
 #include <string.h>
 
+#include "noff.h" // for memory management
+
 #define UserStackSize		1024 	// increase this as necessary!
+
+// Specify victim
+enum VictimType {
+    Random,
+    LRU,
+    LFU
+};
 
 class AddrSpace {
   public:
@@ -30,9 +39,16 @@ class AddrSpace {
     void SaveState();			// Save/restore address space-specific
     void RestoreState();		// info on a context switch 
     static bool usedPhyPage[NumPhysPages];
-  private:
+
+    // Change to public
     TranslationEntry *pageTable;	// Assume linear page table translation
 					// for now!
+
+    // Since noffH and executable have to be used later, to copy data into mainMemory
+    NoffHeader noffH;
+    OpenFile *executable;
+
+  private:
     unsigned int numPages;		// Number of pages in the virtual 
 					// address space
 
@@ -42,6 +58,30 @@ class AddrSpace {
     void InitRegisters();		// Initialize user-level CPU registers,
 					// before jumping to user code
 
+};
+
+class FrameInfoEntry{
+  public:
+    bool valid; // valid to use or not
+    bool lock;
+    AddrSpace *addrspace; // which process is using this page
+    unsigned int vpn; // virtual page number
+    // which virtual page of the process is stored in this page
+
+    unsigned int latestTick;
+    unsigned int usageCount;
+};
+
+class MemoryManager{
+  public:
+    VictimType vicType;
+    MemoryManager(VictimType v);
+    int TransAddr(AddrSpace *space, int virAddr);
+    bool AcquirePage(AddrSpace *space, int vpn);
+    bool ReleasePage(AddrSpace *space, int vpn);
+    void PageFaultHandler(int faultPageNum);
+    
+    int ChooseVictim();
 };
 
 #endif // ADDRSPACE_H
