@@ -16,6 +16,10 @@
 #include "filesys.h"
 #include "machine.h"
 #include "synchdisk.h"
+
+#include "addrspace.h" // memory management
+
+
 class SynchDisk;
 class UserProgKernel : public ThreadedKernel {
   public:
@@ -33,6 +37,14 @@ class UserProgKernel : public ThreadedKernel {
 // These are public for notational convenience.
     Machine *machine;
     FileSystem *fileSystem;
+
+    // memorymanagement
+    SynchDisk *swap;
+    FrameInfoEntry *frameTable;
+    FrameInfoEntry *swapTable;
+    MemoryManager *memoryManager;
+    VictimType vicType;
+    // int faultPageNum;
 
 #ifdef FILESYS
     SynchDisk *synchDisk;
