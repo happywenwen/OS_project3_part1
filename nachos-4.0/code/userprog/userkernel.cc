@@ -61,6 +61,24 @@ UserProgKernel::Initialize(SchedulerType type)
 {
     ThreadedKernel::Initialize(type);	// init multithreading
     machine = new Machine(debugUserProg);
+
+    // Memory management
+    swap = new SynchDisk("SWAPSPACE");
+    frameTable = new FrameInfoEntry[32];
+    for(int i = 0; i < 32; i++){
+        frameTable[i].valid = true;
+        frameTable[i].lock = false;
+        frameTable[i].addrspace = NULL;
+        frameTable[i].vpn = 0;
+    }
+    swapTable = new FrameInfoEntry[1024];
+    for(int i = 0; i < 1024; i++){
+        swapTable[i].valid = true;
+        swapTable[i].lock = false;
+        swapTable[i].addrspace = NULL;
+        swapTable[i].vpn = 0;
+    }
+
     fileSystem = new FileSystem();
 #ifdef FILESYS
     synchDisk = new SynchDisk("New SynchDisk");

@@ -57,7 +57,7 @@ class AddrSpace {
 
     void InitRegisters();		// Initialize user-level CPU registers,
 					// before jumping to user code
-
+    int TranalateVir2Phys(int);
 };
 
 class FrameInfoEntry{
