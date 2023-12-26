@@ -435,6 +435,14 @@ bool MemoryManager::ReleasePage(AddrSpace *space, int vpn){
 void MemoryManager::PageFaultHandler(int faultPageNum){
     DEBUG(dbgAddr, "HANDLING");
     // Invoke when page fault occurs
+    // update page fault info and LRU, LFU data
+    kernel -> stats -> numPageFaults++;
+    TranslationEntry *entry;
+    entry = &kernel -> machine -> pageTable[faultPageNum];
+    unsigned int pageFrame = entry -> physicalPage;
+    kernel -> frameTable[pageFrame].usageCount++;
+    kernel -> frameTable[pageFrame].latestTick = kernel -> stats -> totalTicks;
+
     // Exchange between frameTable <-> swapTable
     TranslationEntry *pageTable = kernel -> currentThread -> space -> pageTable;
     FrameInfoEntry *frameTable = kernel -> frameTable;
@@ -465,7 +473,47 @@ int MemoryManager::ChooseVictim(){
        ret_j = rand()%32;
        // DEBUG(dbgPage, "RANDOM SWAPOUT" << ret_j); 
     }
-    // not implement LRU, LFU
+    else if(kernel -> memoryManager -> vicType == LRU){
+       // least recent used (LRU)
+       int minTick = 0;
+       int min_j;
+       for(int j = 0; j < NumPhysPages; j++){
+           // DEBUG(dbgPage, "Frame " << j << " latestTick: " << frameTable[j].latestTick)
+           if(j == 0){
+               min_j = 0;
+               minTick = frameTable[j].latestTick;
+           }
+           else{
+               int curTick = frameTable[j].latestTick;
+               if(curTick < minTick){
+                   minTick = curTick;
+                   min_j = j;
+               }
+           }
+       }
+       ret_j = min_j;
+       // DEBUG(dbgPage, "LRU SWAPOUT" << ret_j);
+    }
+    else if(kernel -> memoryManager -> vicType == LFU){
+       int minCount = 0;
+       int min_j;
+       for(int j = 0; j < NumPhysPages; j++){
+           // DEBUG(dbgPage, "Frame " << j << " usageCount: " << frameTable[j].usageCount)
+           if(j == 0){
+               min_j = 0;
+               minCount = frameTable[j].usageCount;
+           }
+           else{
+               int curCount = frameTable[j].usageCount;
+               if(curCount < minCount){
+                   minCount = curCount;
+                   min_j = j;
+               }
+           }
+       }
+       ret_j = min_j;
+       // DEBUG(dbgPage, "LFU SWAPOUT" << ret_j);
+    }
     else{
         ret_j = 0;
         // DEBUG(dbgPage, "ELSE SWAPOUT");

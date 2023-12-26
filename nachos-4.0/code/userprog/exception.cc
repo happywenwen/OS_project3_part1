@@ -93,7 +93,6 @@ ExceptionHandler(ExceptionType which)
         // Memory management
         case PageFaultException:
             val = kernel -> machine -> ReadRegister(BadVAddrReg);
-            kernel -> stats -> numPageFaults++;
             kernel -> memoryManager -> PageFaultHandler(val / PageSize);
             return;
 
