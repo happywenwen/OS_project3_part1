@@ -43,6 +43,22 @@ UserProgKernel::UserProgKernel(int argc, char **argv)
 		cout << "	./nachos -s : Print machine status during the machine is on." << endl;
 		cout << "	./nachos -e file1 -e file2 : executing file1 and file2."  << endl;
 	}
+        else if (strcmp(argv[i], "-vic") == 0){
+            ASSERT(i + 1 < argc); // next argument define victim type
+            char *vicArg = argv[i+1];
+            if(strcmp(vicArg, "random") == 0){
+                vicType = Random;
+            } 
+            else if (strcmp(vicArg, "lru") == 0){
+                vicType = LRU;
+            }
+            else if (strcmp(vicArg, "lfu") == 0){
+                vicType = LFU;
+            } 
+            else {
+                vicType = Random;
+            }
+        }
     }
 }
 
@@ -78,6 +94,7 @@ UserProgKernel::Initialize(SchedulerType type)
         swapTable[i].addrspace = NULL;
         swapTable[i].vpn = 0;
     }
+    memoryManager = new MemoryManager(vicType);
 
     fileSystem = new FileSystem();
 #ifdef FILESYS

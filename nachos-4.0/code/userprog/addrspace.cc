@@ -333,6 +333,10 @@ void AddrSpace::RestoreState()
     kernel->machine->pageTableSize = numPages;
 }
 
+MemoryManager::MemoryManager(VictimType v){
+    vicType = v;
+}
+
 int MemoryManager::TransAddr(AddrSpace *space, int virAddr){
     int physAddr = 0;
     int vpn = (unsigned) virAddr / PageSize;
@@ -340,4 +344,132 @@ int MemoryManager::TransAddr(AddrSpace *space, int virAddr){
     ASSERT(space -> pageTable[vpn].valid); // should be valid before translation
     physAddr = space -> pageTable[vpn].physicalPage * PageSize + offset;
     return physAddr;
+}
+
+bool MemoryManager::AcquirePage(AddrSpace *space, int vpn){
+    // ask a page(frame) for vpn
+    // From VM(disk) to frame
+    // Assume there already has empty frame!
+    FrameInfoEntry *frameTable = kernel -> frameTable;
+    FrameInfoEntry *swapTable = kernel -> swapTable;
+    int k = space -> pageTable[vpn].virtualPage; // index for swap table
+    for(int j = 0; j < NumPhysPages; j++){
+        // find an available physical frame
+        if(frameTable[j].valid == true){
+            // update frame table: occupied
+            frameTable[j].valid = false;
+            frameTable[j].addrspace = space;
+            frameTable[j].vpn = vpn;
+            // LRU, LRU counting
+            frameTable[j].usageCount = 0;
+            frameTable[j].latestTick = kernel -> stats -> totalTicks;
+
+            // copy data from VM to frame
+            char *inBuffer = new char[PageSize];
+            kernel -> swap -> ReadSector(k, inBuffer);
+            bcopy(inBuffer, &(kernel -> machine -> mainMemory[j*PageSize]), PageSize);
+
+            // update page table
+            space -> pageTable[vpn].virtualPage = 1024;
+            space -> pageTable[vpn].physicalPage = j;
+            space -> pageTable[vpn].valid = true;
+            AddrSpace::usedPhyPage[j] = true;
+
+            // update swap table
+            swapTable[k].addrspace = NULL;
+            swapTable[k].valid = true;
+
+            delete[] inBuffer;
+
+            DEBUG(dbgAddr, "OCCUPIED PHYSICAL FRAME" << j); 
+            return true;
+        }
+    }
+    // Exceed NumPhysPages 32, return false to indicate
+    DEBUG(dbgAddr, "EXCEED NUMPHYSPAGES");
+    return false;
+}
+
+bool MemoryManager::ReleasePage(AddrSpace *space, int vpn){
+    // free a page at a time
+    // Swap out: from frame to disk
+    FrameInfoEntry *frameTable = kernel -> frameTable;
+    FrameInfoEntry *swapTable = kernel -> swapTable;
+    int j = space -> pageTable[vpn].physicalPage;
+    for(int k = 0; k < 1024; k++){
+       if(swapTable[k].valid == true){
+            // update swap table
+            swapTable[k].valid = false;
+            swapTable[k].addrspace = space;
+            swapTable[k].vpn = vpn;
+
+            // update page table
+            space -> pageTable[vpn].valid = false;
+            space -> pageTable[vpn].virtualPage = k;
+            space -> pageTable[vpn].physicalPage = NumPhysPages;
+            AddrSpace::usedPhyPage[NumPhysPages] = true;
+
+            // copy data from frame to disk 
+            char *outBuffer = new char[PageSize];
+            bcopy(&(kernel -> machine -> mainMemory[j*PageSize]), outBuffer, PageSize);
+            kernel -> swap -> WriteSector(k, outBuffer);
+
+            // update frame table
+            frameTable[j].valid = true;
+            frameTable[j].addrspace = NULL;
+            frameTable[j].latestTick = 0;
+            for(int jj = 0; jj < 32; jj++){
+                frameTable[jj].usageCount = 0;
+            }
+            
+            delete[] outBuffer;
+            DEBUG(dbgAddr, "RELEASE FRAME " << j << " TO VM " << k); 
+            return true;
+       }
+    }
+    // Exceed 1024 sectors, return false to indicate
+    DEBUG(dbgAddr, "EXCEED DISK SECTORS");
+    return false;
+}
+
+void MemoryManager::PageFaultHandler(int faultPageNum){
+    DEBUG(dbgAddr, "HANDLING");
+    // Invoke when page fault occurs
+    // Exchange between frameTable <-> swapTable
+    TranslationEntry *pageTable = kernel -> currentThread -> space -> pageTable;
+    FrameInfoEntry *frameTable = kernel -> frameTable;
+    FrameInfoEntry *swapTable = kernel -> swapTable;
+
+    int k = pageTable[faultPageNum].virtualPage; // target
+
+    while(AcquirePage(kernel -> currentThread -> space, faultPageNum) == false){
+        // while AquirePage return false: No available physical frame
+        // release one for it
+        int j_vic = ChooseVictim();
+        AddrSpace * addr_vic = frameTable[j_vic].addrspace;
+        int vpn_vic = frameTable[j_vic].vpn;
+        bool releaseSuccess = ReleasePage(addr_vic, vpn_vic);
+        ASSERT(releaseSuccess);
+    }
+}
+
+int MemoryManager::ChooseVictim(){
+    FrameInfoEntry *frameTable = kernel -> frameTable;
+    FrameInfoEntry *swapTable = kernel -> swapTable;
+    // input: method of choosing victim
+    // output: index j, indicate victim for frameTable
+    int ret_j = -1; // index for victim
+
+    if(kernel -> memoryManager -> vicType == Random){
+       // random
+       ret_j = rand()%32;
+       // DEBUG(dbgPage, "RANDOM SWAPOUT" << ret_j); 
+    }
+    // not implement LRU, LFU
+    else{
+        ret_j = 0;
+        // DEBUG(dbgPage, "ELSE SWAPOUT");
+    }
+    // kernel -> stats -> frameStat[ret_j]++;
+    return ret_j;
 }
